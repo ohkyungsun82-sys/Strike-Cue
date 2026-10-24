@@ -2,136 +2,267 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>온라인 당구 게임</title>
+    <title>Strike Cue - 온라인 당구</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background: #111; color: #fff; text-align: center; margin: 0; padding: 20px; }
-        .screen { display: none; }
-        .active { display: block; }
-        input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; }
-        button { background: #27ae60; color: white; cursor: pointer; }
-        button:hover { background: #2ecc71; }
-        #gameCanvas { background: #0b6623; border: 15px solid #5c3a21; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.8); cursor: crosshair; }
-        #ui-panel { margin-top: 10px; font-size: 18px; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: #0f172a; color: #fff; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .screen { display: none; width: 100%; height: 100%; justify-content: center; align-items: center; flex-direction: column; position: absolute; }
+        .screen.active { display: flex; }
+        
+        .auth-box { background: #1e293b; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 350px; text-align: center; border: 1px solid #334155; }
+        .auth-box h1 { margin-bottom: 25px; color: #38bdf8; font-size: 26px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #0f172a; border: 1px solid #475569; border-radius: 8px; color: white; font-size: 16px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 12px; margin-top: 10px; background: #0284c7; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn:hover { background: #0369a1; }
+        .switch-btn { background: transparent; color: #94a3b8; border: none; margin-top: 15px; cursor: pointer; font-size: 14px; }
+        .switch-btn:hover { color: white; }
+
+        .modal-container { background: #1e293b; border: 1px solid #334155; border-radius: 20px; padding: 30px; width: 850px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); position: relative; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .top-title { font-size: 24px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+        .top-buttons { display: flex; gap: 10px; align-items: center; }
+        .menu-btn { background: #334155; border: none; padding: 10px 18px; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .menu-btn:hover { background: #475569; }
+        .close-btn { background: #ef4444; border: none; width: 36px; height: 36px; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 18px; }
+
+        .cards-wrapper { display: flex; gap: 20px; justify-content: center; }
+        .game-card { width: 250px; height: 340px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 25px 15px; box-sizing: border-box; cursor: pointer; transition: transform 0.2s; position: relative; border: 2px solid transparent; }
+        .game-card:hover { transform: translateY(-5px); }
+        .card-4ball { background: linear-gradient(135deg, #065f46 0%, #064e3b 100%); border-color: #059669; }
+        .card-carom { background: linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%); border-color: #3b82f6; opacity: 0.7; }
+        .card-pocket { background: linear-gradient(135deg, #581c87 0%, #3b0764 100%); border-color: #a855f7; }
+        
+        .player-count { background: rgba(0,0,0,0.3); padding: 6px 14px; border-radius: 20px; font-size: 13px; color: #cbd5e1; }
+        .card-img-box { width: 110px; height: 110px; background: rgba(0,0,0,0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; position: relative; }
+        .card-title { font-size: 26px; font-weight: bold; margin: 0; }
+        .card-desc { font-size: 13px; color: #cbd5e1; text-align: center; margin: 0; }
+
+        .user-info-box { background: #0f172a; padding: 8px 16px; border-radius: 10px; font-size: 14px; border: 1px solid #334155; }
+        .admin-badge { background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-left: 5px; }
+
+        #gameCanvas { background: #064e3b; border: 12px solid #78350f; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.8); cursor: crosshair; }
+        
+        .ranking-list { max-height: 250px; overflow-y: auto; text-align: left; }
+        .ranking-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #334155; font-size: 15px; }
     </style>
 </head>
 <body>
 
     <!-- 로그인 화면 -->
-    <div id="auth-screen" class="screen active">
-        <h2>🎱 온라인 당구 게임</h2>
-        <div>
-            <input type="text" id="username" placeholder="아이디"><br>
-            <input type="password" id="password" placeholder="비밀번호"><br>
-            <button onclick="login()">로그인</button>
-            <button onclick="register()">회원가입</button>
+    <div id="login-screen" class="screen active">
+        <div class="auth-box">
+            <h1>Strike Cue</h1>
+            <input type="text" id="login-id" placeholder="아이디">
+            <input type="password" id="login-pw" placeholder="비밀번호">
+            <button class="btn" onclick="login()">로그인</button>
+            <button class="switch-btn" onclick="showScreen('register-screen')">계정이 없으신가요? 회원가입</button>
+            <p id="login-msg" style="color: #ef4444; font-size: 13px; margin-top: 10px;"></p>
         </div>
-        <p id="auth-msg" style="color: #e74c3c;"></p>
     </div>
 
-    <!-- 로비 화면 -->
+    <!-- 회원가입 화면 -->
+    <div id="register-screen" class="screen">
+        <div class="auth-box">
+            <h1>회원가입</h1>
+            <input type="text" id="reg-id" placeholder="아이디 ('Strike Cue'는 관리자)">
+            <input type="password" id="reg-pw" placeholder="비밀번호">
+            <button class="btn" onclick="register()">가입하기 & 자동 로그인</button>
+            <button class="switch-btn" onclick="showScreen('login-screen')">이미 계정이 있으신가요? 로그인</button>
+            <p id="reg-msg" style="color: #ef4444; font-size: 13px; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <!-- 로비 화면 (게임 선택) -->
     <div id="lobby-screen" class="screen">
-        <h2>환영합니다, <span id="user-display"></span>님!</h2>
-        <p>게임 모드를 선택하세요:</p>
-        <button onclick="joinGame('pocket')">포켓볼 모드</button>
-        <button onclick="joinGame('4ball')">4구 모드</button>
+        <div class="modal-container">
+            <div class="top-bar">
+                <div class="top-title">
+                    ▶ 게임 선택
+                </div>
+                <div class="top-buttons">
+                    <div class="user-info-box" id="user-info-display"></div>
+                    <button class="menu-btn" onclick="openRanking()">📋 랭킹</button>
+                    <button class="menu-btn" onclick="logout()" style="background: #b91c1c;">로그아웃</button>
+                </div>
+            </div>
+            <div class="cards-wrapper">
+                <div class="game-card card-4ball" onclick="joinGame('4ball')">
+                    <div class="player-count">경기 중인 플레이어: 571</div>
+                    <div class="card-img-box">
+                        <div style="font-size: 32px;">🔴🟡⚪</div>
+                    </div>
+                    <div>
+                        <div class="card-title">4구</div>
+                        <p class="card-desc">빨간 공 두 개를 맞춰요</p>
+                    </div>
+                </div>
+                <div class="game-card card-carom">
+                    <div class="player-count">경기 중인 플레이어: 6</div>
+                    <div class="card-img-box">
+                        <div style="font-size: 28px;">🔒</div>
+                    </div>
+                    <div>
+                        <div class="card-title" style="font-size: 22px;">3구</div>
+                        <p class="card-desc">쿠션 세 번, 쓰리쿠션</p>
+                    </div>
+                </div>
+                <div class="game-card card-pocket" onclick="joinGame('pocket')">
+                    <div class="player-count">경기 중인 플레이어: 156</div>
+                    <div class="card-img-box">
+                        <div style="font-size: 36px;">🎱⚪</div>
+                    </div>
+                    <div>
+                        <div class="card-title">포켓볼</div>
+                        <p class="card-desc">8볼을 마지막에 넣어요</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 랭킹 모달 화면 -->
+    <div id="ranking-screen" class="screen">
+        <div class="modal-container" style="width: 500px;">
+            <div class="top-bar">
+                <div class="top-title">🏆 실시간 랭킹</div>
+                <button class="close-btn" onclick="showScreen('lobby-screen')">✕</button>
+            </div>
+            <div class="ranking-list" id="ranking-container">
+                <!-- 랭킹 목록 로드 -->
+            </div>
+        </div>
     </div>
 
     <!-- 대기 화면 -->
     <div id="waiting-screen" class="screen">
-        <h2>상대 플레이어를 찾는 중입니다...</h2>
+        <h2>상대 플레이어를 기다리는 중입니다...</h2>
+        <button class="btn" style="width: 200px; margin-top: 20px;" onclick="showScreen('lobby-screen')">취소</button>
     </div>
 
     <!-- 게임 화면 -->
     <div id="game-screen" class="screen">
-        <div id="ui-panel">
-            모드: <span id="mode-name"></span> | 턴: <span id="turn-info" style="color: #f1c40f; font-weight: bold;"></span>
+        <div style="margin-bottom: 10px; font-size: 18px;">
+            모드: <span id="mode-name" style="color: #38bdf8; font-weight: bold;"></span> | 턴: <span id="turn-info" style="color: #facc15; font-weight: bold;"></span>
         </div>
         <canvas id="gameCanvas" width="800" height="400"></canvas>
-        <div>
-            <p>마우스로 당구공을 겨누고 끌어서(Drag) 파워를 조절한 뒤 놓으세요!</p>
+        <div style="margin-top: 15px; display: flex; gap: 10px;">
+            <button class="btn" style="background: #10b981; width: 150px;" onclick="winGameTest()">[테스트] 승리하기 (+500k)</button>
+            <button class="btn" style="background: #ef4444; width: 150px;" onclick="showScreen('lobby-screen')">나가기</button>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
+        let currentUser = null;
 
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
         }
 
-        function register() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            socket.emit('register', { username, password }, (res) => {
-                document.getElementById('auth-msg').innerText = res.message;
-                document.getElementById('auth-msg').style.color = res.success ? '#2ecc71' : '#e74c3c';
-            });
+        function formatMoney(amount) {
+            if (amount >= 1000000000) {
+                return (amount / 1000000000).toFixed(1) + 'b';
+            } else if (amount >= 1000000) {
+                return (amount / 1000000).toFixed(1) + 'm';
+            } else if (amount >= 1000) {
+                return (amount / 1000).toFixed(0) + 'k';
+            }
+            return amount.toString();
         }
 
-        function login() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            socket.emit('login', { username, password }, (res) => {
+        function updateUserInfoDisplay() {
+            if (!currentUser) return;
+            let adminTag = currentUser.isAdmin ? '<span class="admin-badge">관리자</span>' : '';
+            document.getElementById('user-info-display').innerHTML = `👤 ${currentUser.username} ${adminTag} | 💰 ${formatMoney(currentUser.money)}`;
+        }
+
+        function register() {
+            const username = document.getElementById('reg-id').value;
+            const password = document.getElementById('reg-pw').value;
+            socket.emit('register', { username, password }, (res) => {
                 if (res.success) {
-                    document.getElementById('user-display').innerText = res.username;
+                    currentUser = res.user;
+                    updateUserInfoDisplay();
                     showScreen('lobby-screen');
                 } else {
-                    document.getElementById('auth-msg').innerText = res.message;
+                    document.getElementById('reg-msg').innerText = res.message;
                 }
             });
         }
 
+        function login() {
+            const username = document.getElementById('login-id').value;
+            const password = document.getElementById('login-pw').value;
+            socket.emit('login', { username, password }, (res) => {
+                if (res.success) {
+                    currentUser = res.user;
+                    updateUserInfoDisplay();
+                    showScreen('lobby-screen');
+                } else {
+                    document.getElementById('login-msg').innerText = res.message;
+                }
+            });
+        }
+
+        function logout() {
+            currentUser = null;
+            showScreen('login-screen');
+        }
+
+        function openRanking() {
+            socket.emit('getRanking');
+            showScreen('ranking-screen');
+        }
+
+        socket.on('rankingData', (list) => {
+            const container = document.getElementById('ranking-container');
+            container.innerHTML = '';
+            list.forEach((user, index) => {
+                let badge = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                container.innerHTML += `
+                    <div class="ranking-item">
+                        <span><b>${badge}</b> ${user.username} ${user.username === 'Strike Cue' ? '<span class="admin-badge">관리자</span>' : ''}</span>
+                        <span>💰 ${formatMoney(user.money)} (승리: ${user.wins})</span>
+                    </div>
+                `;
+            });
+        });
+
         function joinGame(gameType) {
+            if (gameType === 'carom') {
+                alert('3구 모드는 준비 중입니다!');
+                return;
+            }
             socket.emit('joinGame', { gameType });
             showScreen('waiting-screen');
         }
 
-        let gameData = {};
-        let isMyTurn = false;
-        let isDragging = false;
-        let dragStart = { x: 0, y: 0 };
-
-        socket.on('waiting', (msg) => {
-            console.log(msg);
-        });
-
         socket.on('gameStart', (data) => {
-            gameData = data;
-            document.getElementById('mode-name').innerText = data.gameType === 'pocket' ? '포켓볼' : '4구';
+            document.getElementById('mode-name').innerText = data.gameType === '4ball' ? '4구' : '포켓볼';
             showScreen('game-screen');
-            updateTurn(data.turnPlayer);
-            drawTable();
+            document.getElementById('turn-info').innerText = data.turnPlayer + '님의 턴';
+            drawTable(data.balls);
         });
 
-        socket.on('changeTurn', (data) => {
-            updateTurn(data.turnPlayer);
+        socket.on('moneyUpdate', (newMoney) => {
+            currentUser.money = newMoney;
+            updateUserInfoDisplay();
         });
 
-        socket.on('opponentDisconnected', () => {
-            alert('상대방이 나갔습니다.');
-            location.reload();
-        });
-
-        function updateTurn(turnPlayer) {
-            document.getElementById('turn-info').innerText = turnPlayer + '님의 턴';
-            isMyTurn = (turnPlayer === document.getElementById('user-display').innerText);
+        function winGameTest() {
+            socket.emit('gameOverAndWin');
+            alert('게임 승리! 500k 돈을 획득했습니다!');
+            showScreen('lobby-screen');
         }
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        function drawTable() {
+        function drawTable(balls) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 당구대 바닥
-            ctx.fillStyle = '#0b6623';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // 공 그리기
-            if (gameData.balls) {
-                gameData.balls.forEach(ball => {
+            if (balls) {
+                balls.forEach(ball => {
                     ctx.beginPath();
                     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
                     ctx.fillStyle = ball.color;
@@ -141,65 +272,11 @@
                     ctx.closePath();
                 });
             }
-
-            // 내 턴이고 수구(흰공)가 있다면 조준선 가이드 표시
-            if (isMyTurn && isDragging && gameData.balls) {
-                const whiteBall = gameData.balls.find(b => b.color === 'white');
-                if (whiteBall) {
-                    ctx.beginPath();
-                    ctx.moveTo(whiteBall.x, whiteBall.y);
-                    ctx.lineTo(dragStart.x, dragStart.y);
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
-                    ctx.closePath();
-                }
-            }
         }
 
-        // 마우스 상호작용 (샷 조절)
-        canvas.addEventListener('mousedown', (e) => {
-            if (!isMyTurn) return;
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            const whiteBall = gameData.balls.find(b => b.color === 'white');
-            if (whiteBall) {
-                const dist = Math.hypot(mouseX - whiteBall.x, mouseY - whiteBall.y);
-                if (dist < 30) {
-                    isDragging = true;
-                    dragStart = { x: mouseX, y: mouseY };
-                }
-            }
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            const rect = canvas.getBoundingClientRect();
-            dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-            drawTable();
-        });
-
-        canvas.addEventListener('mouseup', (e) => {
-            if (!isDragging) return;
-            isDragging = false;
-
-            const whiteBall = gameData.balls.find(b => b.color === 'white');
-            if (whiteBall) {
-                const dx = whiteBall.x - dragStart.x;
-                const dy = whiteBall.y - dragStart.y;
-                const power = Math.hypot(dx, dy) * 0.1;
-                const angle = Math.atan2(dy, dx);
-
-                socket.emit('shoot', { power, angle });
-            }
-            drawTable();
-        });
-
-        socket.on('shotResult', (data) => {
-            // 간단히 수구 위치를 샷 방향으로 잠시 이동시키는 애니메이션 효과 연출 가능
-            console.log(`${data.shooter} 샷 발사! 파워: ${data.power}`);
+        socket.on('opponentDisconnected', () => {
+            alert('상대방이 나갔습니다.');
+            showScreen('lobby-screen');
         });
     </script>
 </body>
