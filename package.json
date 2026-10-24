@@ -1,7 +1,6 @@
 {
-  "name": "billiards-game",
+  "name": "strike-cue",
   "version": "1.0.0",
-  "description": "Online Billiards Game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
