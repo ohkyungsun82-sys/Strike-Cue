@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>온라인 당구 게임</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background: #111; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        .screen { display: none; }
+        .active { display: block; }
+        input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; }
+        button { background: #27ae60; color: white; cursor: pointer; }
+        button:hover { background: #2ecc71; }
+        #gameCanvas { background: #0b6623; border: 15px solid #5c3a21; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.8); cursor: crosshair; }
+        #ui-panel { margin-top: 10px; font-size: 18px; }
+    </style>
+</head>
+<body>
+
+    <!-- 로그인 화면 -->
+    <div id="auth-screen" class="screen active">
+        <h2>🎱 온라인 당구 게임</h2>
+        <div>
+            <input type="text" id="username" placeholder="아이디"><br>
+            <input type="password" id="password" placeholder="비밀번호"><br>
+            <button onclick="login()">로그인</button>
+            <button onclick="register()">회원가입</button>
+        </div>
+        <p id="auth-msg" style="color: #e74c3c;"></p>
+    </div>
+
+    <!-- 로비 화면 -->
+    <div id="lobby-screen" class="screen">
+        <h2>환영합니다, <span id="user-display"></span>님!</h2>
+        <p>게임 모드를 선택하세요:</p>
+        <button onclick="joinGame('pocket')">포켓볼 모드</button>
+        <button onclick="joinGame('4ball')">4구 모드</button>
+    </div>
+
+    <!-- 대기 화면 -->
+    <div id="waiting-screen" class="screen">
+        <h2>상대 플레이어를 찾는 중입니다...</h2>
+    </div>
+
+    <!-- 게임 화면 -->
+    <div id="game-screen" class="screen">
+        <div id="ui-panel">
+            모드: <span id="mode-name"></span> | 턴: <span id="turn-info" style="color: #f1c40f; font-weight: bold;"></span>
+        </div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div>
+            <p>마우스로 당구공을 겨누고 끌어서(Drag) 파워를 조절한 뒤 놓으세요!</p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function register() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            socket.emit('register', { username, password }, (res) => {
+                document.getElementById('auth-msg').innerText = res.message;
+                document.getElementById('auth-msg').style.color = res.success ? '#2ecc71' : '#e74c3c';
+            });
+        }
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            socket.emit('login', { username, password }, (res) => {
+                if (res.success) {
+                    document.getElementById('user-display').innerText = res.username;
+                    showScreen('lobby-screen');
+                } else {
+                    document.getElementById('auth-msg').innerText = res.message;
+                }
+            });
+        }
+
+        function joinGame(gameType) {
+            socket.emit('joinGame', { gameType });
+            showScreen('waiting-screen');
+        }
+
+        let gameData = {};
+        let isMyTurn = false;
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+
+        socket.on('waiting', (msg) => {
+            console.log(msg);
+        });
+
+        socket.on('gameStart', (data) => {
+            gameData = data;
+            document.getElementById('mode-name').innerText = data.gameType === 'pocket' ? '포켓볼' : '4구';
+            showScreen('game-screen');
+            updateTurn(data.turnPlayer);
+            drawTable();
+        });
+
+        socket.on('changeTurn', (data) => {
+            updateTurn(data.turnPlayer);
+        });
+
+        socket.on('opponentDisconnected', () => {
+            alert('상대방이 나갔습니다.');
+            location.reload();
+        });
+
+        function updateTurn(turnPlayer) {
+            document.getElementById('turn-info').innerText = turnPlayer + '님의 턴';
+            isMyTurn = (turnPlayer === document.getElementById('user-display').innerText);
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function drawTable() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 당구대 바닥
+            ctx.fillStyle = '#0b6623';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 공 그리기
+            if (gameData.balls) {
+                gameData.balls.forEach(ball => {
+                    ctx.beginPath();
+                    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = ball.color;
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.stroke();
+                    ctx.closePath();
+                });
+            }
+
+            // 내 턴이고 수구(흰공)가 있다면 조준선 가이드 표시
+            if (isMyTurn && isDragging && gameData.balls) {
+                const whiteBall = gameData.balls.find(b => b.color === 'white');
+                if (whiteBall) {
+                    ctx.beginPath();
+                    ctx.moveTo(whiteBall.x, whiteBall.y);
+                    ctx.lineTo(dragStart.x, dragStart.y);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+            }
+        }
+
+        // 마우스 상호작용 (샷 조절)
+        canvas.addEventListener('mousedown', (e) => {
+            if (!isMyTurn) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const whiteBall = gameData.balls.find(b => b.color === 'white');
+            if (whiteBall) {
+                const dist = Math.hypot(mouseX - whiteBall.x, mouseY - whiteBall.y);
+                if (dist < 30) {
+                    isDragging = true;
+                    dragStart = { x: mouseX, y: mouseY };
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const rect = canvas.getBoundingClientRect();
+            dragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            drawTable();
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const whiteBall = gameData.balls.find(b => b.color === 'white');
+            if (whiteBall) {
+                const dx = whiteBall.x - dragStart.x;
+                const dy = whiteBall.y - dragStart.y;
+                const power = Math.hypot(dx, dy) * 0.1;
+                const angle = Math.atan2(dy, dx);
+
+                socket.emit('shoot', { power, angle });
+            }
+            drawTable();
+        });
+
+        socket.on('shotResult', (data) => {
+            // 간단히 수구 위치를 샷 방향으로 잠시 이동시키는 애니메이션 효과 연출 가능
+            console.log(`${data.shooter} 샷 발사! 파워: ${data.power}`);
+        });
+    </script>
+</body>
+</html>
