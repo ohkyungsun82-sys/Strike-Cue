@@ -26,22 +26,21 @@ function saveUsers(users) {
 }
 
 const rooms = {};
+let activeSockets = new Set();
 
-function getActivePlayerCounts() {
+function updatePlayerCounts() {
     let counts = { '4ball': 0, 'pocket': 0 };
     Object.values(rooms).forEach(room => {
         if (counts[room.gameType] !== undefined) {
-            counts[room.gameType] += room.players.length;
+            counts[room.gameType] += room.players.filter(p => p.id !== 'AI_BOT').length;
         }
     });
-    return {
-        '4ball': counts['4ball'] + Math.floor(Math.random() * 5) + 1,
-        'pocket': counts['pocket'] + Math.floor(Math.random() * 5) + 1
-    };
+    io.emit('playerCounts', counts);
 }
 
 io.on('connection', (socket) => {
-    socket.emit('playerCounts', getActivePlayerCounts());
+    activeSockets.add(socket.id);
+    updatePlayerCounts();
 
     socket.on('register', ({ username, password }, callback) => {
         if (!username || !password) return callback({ success: false, message: '모든 항목을 입력하세요.' });
@@ -93,7 +92,7 @@ io.on('connection', (socket) => {
 
         if (isAI) {
             const roomId = 'ai_room_' + Math.random().toString(36).substring(2, 9);
-            const aiRoom = {
+            rooms[roomId] = {
                 roomId,
                 gameType,
                 isAI: true,
@@ -103,28 +102,22 @@ io.on('connection', (socket) => {
                 ],
                 started: true,
                 turn: 0,
-                balls: gameType === '4ball' ? [
+                balls: [
                     { id: 0, x: 200, y: 200, color: '#fff', radius: 10 },
                     { id: 1, x: 600, y: 200, color: '#f1c40f', radius: 10 },
                     { id: 2, x: 500, y: 180, color: '#e74c3c', radius: 10 },
                     { id: 3, x: 500, y: 220, color: '#e74c3c', radius: 10 }
-                ] : [
-                    { id: 0, x: 200, y: 200, color: '#fff', radius: 10 },
-                    { id: 1, x: 550, y: 200, color: '#f1c40f', radius: 10 },
-                    { id: 2, x: 580, y: 185, color: '#3498db', radius: 10 },
-                    { id: 3, x: 580, y: 215, color: '#e74c3c', radius: 10 }
                 ]
             };
-            rooms[roomId] = aiRoom;
             socket.join(roomId);
             socket.roomID = roomId;
-
             socket.emit('gameStart', {
-                gameType: aiRoom.gameType,
-                balls: aiRoom.balls,
-                turnPlayer: aiRoom.players[0].username,
+                gameType,
+                balls: rooms[roomId].balls,
+                turnPlayer: socket.username,
                 isAI: true
             });
+            updatePlayerCounts();
             return;
         }
 
@@ -150,16 +143,11 @@ io.on('connection', (socket) => {
 
         if (targetRoom.players.length === 2) {
             targetRoom.started = true;
-            targetRoom.balls = gameType === '4ball' ? [
+            targetRoom.balls = [
                 { id: 0, x: 200, y: 200, color: '#fff', radius: 10 },
                 { id: 1, x: 600, y: 200, color: '#f1c40f', radius: 10 },
                 { id: 2, x: 500, y: 180, color: '#e74c3c', radius: 10 },
                 { id: 3, x: 500, y: 220, color: '#e74c3c', radius: 10 }
-            ] : [
-                { id: 0, x: 200, y: 200, color: '#fff', radius: 10 },
-                { id: 1, x: 550, y: 200, color: '#f1c40f', radius: 10 },
-                { id: 2, x: 580, y: 185, color: '#3498db', radius: 10 },
-                { id: 3, x: 580, y: 215, color: '#e74c3c', radius: 10 }
             ];
             io.to(targetRoom.roomId).emit('gameStart', {
                 gameType: targetRoom.gameType,
@@ -167,10 +155,10 @@ io.on('connection', (socket) => {
                 turnPlayer: targetRoom.players[0].username,
                 isAI: false
             });
-            io.emit('playerCounts', getActivePlayerCounts());
         } else {
             socket.emit('waiting', '상대 플레이어 대기 중...');
         }
+        updatePlayerCounts();
     });
 
     socket.on('shoot', ({ power, angle }) => {
@@ -190,10 +178,9 @@ io.on('connection', (socket) => {
 
             if (room.isAI && nextTurnPlayer.id === 'AI_BOT') {
                 setTimeout(() => {
-                    // AI 턴: 70% 확률로 최악(엉뚱한 방향/약한 파워), 30% 확률로 최고(정확한 샷)
                     const isWorst = Math.random() < 0.7;
                     const aiPower = isWorst ? Math.random() * 2 : 15 + Math.random() * 5;
-                    const aiAngle = isWorst ? Math.random() * Math.PI * 2 : 0; // 최악은 엉뚱한 각도
+                    const aiAngle = isWorst ? Math.random() * Math.PI * 2 : 0;
 
                     io.to(room.roomId).emit('shotResult', { power: aiPower, angle: aiAngle, shooter: 'AI 당구고수' });
 
@@ -219,12 +206,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        activeSockets.delete(socket.id);
         if (socket.roomID && rooms[socket.roomID]) {
             const room = rooms[socket.roomID];
             io.to(room.roomId).emit('opponentDisconnected');
             delete rooms[socket.roomID];
         }
-        io.emit('playerCounts', getActivePlayerCounts());
+        updatePlayerCounts();
     });
 });
 
