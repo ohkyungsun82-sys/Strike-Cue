@@ -29,22 +29,49 @@ const rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('register', ({ username, password }, callback) => {
-        if (!username || !password) return callback({ success: false, message: '정보를 입력하세요.' });
+        if (!username || !password) return callback({ success: false, message: '모든 항목을 입력하세요.' });
         const users = loadUsers();
         if (users[username]) return callback({ success: false, message: '이미 존재하는 아이디입니다.' });
         
-        users[username] = password;
+        users[username] = {
+            password,
+            money: 1000,
+            wins: 0,
+            isAdmin: (username === 'Strike Cue')
+        };
         saveUsers(users);
-        callback({ success: true, message: '회원가입 성공!' });
+        socket.username = username;
+        callback({ success: true, user: { username, money: 1000, isAdmin: users[username].isAdmin } });
     });
 
     socket.on('login', ({ username, password }, callback) => {
         const users = loadUsers();
-        if (!users[username] || users[username] !== password) {
+        if (!users[username] || users[username].password !== password) {
             return callback({ success: false, message: '아이디 또는 비밀번호가 틀렸습니다.' });
         }
         socket.username = username;
-        callback({ success: true, username });
+        if (username === 'Strike Cue' && !users[username].isAdmin) {
+            users[username].isAdmin = true;
+            saveUsers(users);
+        }
+        callback({ 
+            success: true, 
+            user: { 
+                username, 
+                money: users[username].money || 1000, 
+                isAdmin: username === 'Strike Cue' 
+            } 
+        });
+    });
+
+    socket.on('getRanking', () => {
+        const users = loadUsers();
+        const rankList = Object.keys(users).map(name => ({
+            username: name,
+            money: users[name].money || 1000,
+            wins: users[name].wins || 0
+        })).sort((a, b) => b.money - a.money).slice(0, 10);
+        socket.emit('rankingData', rankList);
     });
 
     socket.on('joinGame', ({ gameType }) => {
@@ -71,46 +98,40 @@ io.on('connection', (socket) => {
 
         if (targetRoom.players.length === 2) {
             targetRoom.started = true;
-            if (targetRoom.gameType === 'pocket') {
+            if (targetRoom.gameType === '4ball') {
                 targetRoom.balls = [
-                    { id: 0, x: 200, y: 200, color: 'white', radius: 10 },
-                    { id: 1, x: 600, y: 200, color: 'yellow', radius: 10 },
-                    { id: 2, x: 620, y: 190, color: 'blue', radius: 10 },
-                    { id: 3, x: 620, y: 210, color: 'red', radius: 10 }
+                    { id: 0, x: 200, y: 200, color: '#fff', radius: 10 },
+                    { id: 1, x: 600, y: 200, color: '#f1c40f', radius: 10 },
+                    { id: 2, x: 500, y: 180, color: '#e74c3c', radius: 10 },
+                    { id: 3, x: 500, y: 220, color: '#e74c3c', radius: 10 }
                 ];
             } else {
                 targetRoom.balls = [
-                    { id: 0, x: 200, y: 200, color: 'white', radius: 10 },
-                    { id: 1, x: 600, y: 200, color: 'yellow', radius: 10 },
-                    { id: 2, x: 500, y: 180, color: 'red', radius: 10 },
-                    { id: 3, x: 500, y: 220, color: 'red', radius: 10 }
+                    { id: 0, x: 200, y: 200, color: '#fff', radius: 10 },
+                    { id: 1, x: 550, y: 200, color: '#f1c40f', radius: 10 },
+                    { id: 2, x: 580, y: 185, color: '#3498db', radius: 10 },
+                    { id: 3, x: 580, y: 215, color: '#e74c3c', radius: 10 }
                 ];
             }
             io.to(targetRoom.roomId).emit('gameStart', {
-                players: targetRoom.players,
                 gameType: targetRoom.gameType,
                 balls: targetRoom.balls,
                 turnPlayer: targetRoom.players[0].username
             });
         } else {
-            socket.emit('waiting', '상대 대기중...');
+            socket.emit('waiting', '상대 플레이어 대기 중...');
         }
     });
 
-    socket.on('shoot', ({ power, angle }) => {
-        const room = rooms[socket.roomID];
-        if (!room || !room.started) return;
-
-        const currentTurnPlayer = room.players[room.turn % room.players.length];
-        if (currentTurnPlayer.id !== socket.id) return;
-
-        io.to(room.roomId).emit('shotResult', { power, angle, shooter: currentTurnPlayer.username });
-
-        room.turn++;
-        const nextTurnPlayer = room.players[room.turn % room.players.length];
-        setTimeout(() => {
-            io.to(room.roomId).emit('changeTurn', { turnPlayer: nextTurnPlayer.username });
-        }, 2000);
+    socket.on('gameOverAndWin', () => {
+        if (!socket.username) return;
+        const users = loadUsers();
+        if (users[socket.username]) {
+            users[socket.username].money = (users[socket.username].money || 1000) + 500000;
+            users[socket.username].wins = (users[socket.username].wins || 0) + 1;
+            saveUsers(users);
+            socket.emit('moneyUpdate', users[socket.username].money);
+        }
     });
 
     socket.on('disconnect', () => {
