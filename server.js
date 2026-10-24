@@ -26,7 +26,6 @@ function saveUsers(users) {
 }
 
 const rooms = {};
-let activeSockets = new Set();
 
 function updatePlayerCounts() {
     let counts = { '4ball': 0, 'pocket': 0 };
@@ -39,8 +38,12 @@ function updatePlayerCounts() {
 }
 
 io.on('connection', (socket) => {
-    activeSockets.add(socket.id);
     updatePlayerCounts();
+
+    // 클라이언트가 새로고침 후 자동 로그인할 때 소켓에 username 등록
+    socket.on('setSocketUser', (username) => {
+        if (username) socket.username = username;
+    });
 
     socket.on('register', ({ username, password }, callback) => {
         if (!username || !password) return callback({ success: false, message: '모든 항목을 입력하세요.' });
@@ -54,6 +57,7 @@ io.on('connection', (socket) => {
             isAdmin: (username === 'Strike Cue')
         };
         saveUsers(users);
+        socket.username = username;
         callback({ success: true, user: { username, money: 1000, isAdmin: users[username].isAdmin } });
     });
 
@@ -88,11 +92,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('joinGame', ({ gameType, isAI }) => {
-        if (!socket.username) return;
+        if (!socket.username) {
+            // 소켓에 유저 이름이 누락된 경우를 대비해 클라이언트 닉네임으로 강제 할당 시도 가능
+            return;
+        }
 
         if (isAI) {
             const roomId = 'ai_room_' + Math.random().toString(36).substring(2, 9);
-            rooms[roomId] = {
+            const aiRoom = {
                 roomId,
                 gameType,
                 isAI: true,
@@ -109,11 +116,13 @@ io.on('connection', (socket) => {
                     { id: 3, x: 500, y: 220, color: '#e74c3c', radius: 10 }
                 ]
             };
+            rooms[roomId] = aiRoom;
             socket.join(roomId);
             socket.roomID = roomId;
+
             socket.emit('gameStart', {
                 gameType,
-                balls: rooms[roomId].balls,
+                balls: aiRoom.balls,
                 turnPlayer: socket.username,
                 isAI: true
             });
@@ -206,7 +215,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        activeSockets.delete(socket.id);
         if (socket.roomID && rooms[socket.roomID]) {
             const room = rooms[socket.roomID];
             io.to(room.roomId).emit('opponentDisconnected');
